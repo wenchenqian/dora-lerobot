@@ -62,10 +62,14 @@
    * 此时 **n = m = 序列长度**
    * 例如句子有 5 个词 → n = m = 5
 2. Multi-Head Attention 的框架
-![img_6.png](img_6.png)
+   ![img_6.png](img_6.png)
+
 #### Add & Norm（残差设计 & 层归一化）
+
 ![img_7.png](img_7.png)
+
 ## Decoder
+
 ![img_8.png](img_8.png)
 每个解码器层都有三个子层，掩码自注意力层（Masked Self-Attention）、Encoder-Decoder自注意力层、逐位置的前馈神经网络。同样，在每个子层后面都有残差连接（图中的虚线）和层归一化（LayerNorm）操作，二者合起来称为 Add&Norm操作。
 ![img_9.png](img_9.png)
@@ -74,3 +78,11 @@
 训练的时候，当前的单词只关注前面单词的影响，其他做个掩码屏蔽掉
 具体的做法如下，有一个掩码矩阵，这样在计算权重的时候就不会被阴影部分影响
 ![img_11.png](img_11.png)
+
+
+# Multi Latent Attention
+
+从MHA到MLA演化如图所示
+![img_14.png](img_14.png)
+![img_15.png](img_15.png)
+如上图所示：未开启该特性时，当query、key的维度和value的维度不匹配时，会将value维度padding到与query、key相同的维度，然后进入FA进行计算。开启该特性后，在进入FA之前不会进行pad处理，消减pad操作，减少额外显存占用，提升训练性能。
