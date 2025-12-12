@@ -1,7 +1,8 @@
 pangu38B模型适配muon优化器，在金融行业微调
 
 
-
+![img_17.png](img_17.png)
+![img_18.png](img_18.png)
 ![image.png](assets/imafdgfdadfge.png)
 ![image.png](assets/imafdsafdsafge.png)
 ![img_1.png](img_1.png)
