@@ -15,7 +15,6 @@
 *.wav
 # Removing images.
 *.jpg
-*.png
 !docs/src/latency.png
 
 # Remove *.html. Likely be outputed mermaid graph.
