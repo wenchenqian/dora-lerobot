@@ -1,0 +1,50 @@
+accelerate_config:
+  log-throughput: True
+  parallelization:
+    tensor_parallel: 8
+    pipeline:
+      num_stages: 1
+      layer_list:
+      micro_batch_size: 1
+      virtual_stages:
+    context_parallel: 1
+    expert_parallel: 8
+    expert_parallel_inner: 8
+    use_sequence_parallel: True
+    use_distributed_optimizer: False
+    mc2: False
+    overlap-gather: False
+    overlap-reduce: False
+    force-bucketing: False
+    disable-gloo-group: True
+  recompute:
+    granularity:
+    method:
+    layers:
+  precision:
+    reuse_fp32_param: False
+    param_init_dtype: float32
+    compute_dtype: bfloat16
+    softmax_compute_dtype: float32
+    logits_compute_dtype: float32
+    grad_accumulation_dtype: float32
+    residual-connection: bfloat16
+    fused_operators: flash_attention, rmsnorm, fast_gelu, swiglu, rope, gmm_gradient_accumulation, moe_permute_unpermute
+    nofused_operators: masked_softmax
+  gc:
+    manual: True
+    interval: 20
+  moe:
+    grouped_gemm: True
+    token_dispatcher_type: pangu_dropless
+    layer_recompute: False
+    permute_recompute: False
+    activation_recompute: False
+    mla_qkv_recompute: True
+    ep_over_sp: True
+    shared_expert_sp: False
+    overlap_all2all: False
+    overlap_1f1b: False
+    swap_unperm2_activation: True
+  fast_reset_attention_mask: False
+  baseline_time:

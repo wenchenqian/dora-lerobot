@@ -1,0 +1,83 @@
+train_config:
+  use_mcore: True
+  use_deter_comp: False
+  type: 'sft'
+  finetune: True
+  seed: 1234
+  device: B4
+  log_interval: 1
+  train_iters: 30
+  train_samples:
+  batch_size: 64
+  transformer_impl: local
+  timeout: 120
+  monitor:
+    enable-monitor: False
+    monitor-interval: 200
+    moe_per_layer_logging: True
+  no-check-for-nan-in-loss-and-grad: True
+  print-iteration:
+  mask:
+    reset-attention-mask: True
+    reset-position-ids: True
+    eod-mask-loss: False
+    mask-compress: False
+  dataset:
+    name: 0325_sp3_stage2
+    path: /data/bucket-pangu-green-guiyang/yuantao/data/0325_sp3_stage2/bin/R1_0325_sp3_stage2_logits/
+    cache:
+    sequence_length: 4096
+    from_mr: False
+    new-dataset: False
+    shared-storage: True
+    train_fraction: 100
+    eval_fraction: 0
+    test_fraction: 0
+  optimizer:
+    type: "adam"
+    beta1: 0.9
+    beta2: 0.95
+    eps: 1.e-8
+    learning_rate:
+      scheduler: 'cosine'
+      start_lr: 2.2e-5
+      end_lr: 2.2e-6
+      warmup_samples:
+      warmup_steps:
+      decay_samples:
+      warmup_fractions: 0.05
+      override_scheduler: False
+      decay_steps:
+    weight_decay:
+      exclusive_params: ' '
+      ratio: 0.1
+    grad_clip_ratio: 1.0
+  loss_scale:
+    type: dynamic
+    init_scale: 65536.0
+    min_scale: 1.0
+    window: 1000
+    hysteresis: 2
+  ckpt:
+    load_path:
+    save_path:
+    save_steps: 300
+    load_optim:
+    load_rng: False
+    use_ckpt_scheduler: False
+    optim-dist-ckpt: False
+  evaluation:
+    iters: 0
+    interval: 2000
+  profile:
+    enable: False
+    path:
+    start: 10
+    end: 12
+    level: 1
+    with_stack: False
+    with_memory: True
+    with_cpu: True
+    record_shapes: True
+    ranks: 'per_server'
+    dynamic_profile: True
