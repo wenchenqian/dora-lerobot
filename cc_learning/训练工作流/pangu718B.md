@@ -235,14 +235,72 @@ lora:
 | `mlp.linear_fc1/fc2` | Dense 层中的 FFN（前 3 层）               |
 | `output_layer`       | 语言模型头（lm_head）                     |
 
-> ✅ 这是 **全组件 LoRA（Full-Component LoRA）**，覆盖了 **Attention + FFN + Experts + Head**
-
-### 3. 特殊 Hook
+3. 特殊 Hook
 
 - `lora_register_forward_hook: word_embeddings input_layernorm`表示对 **word embeddings 和 input layernorm** 也注册了前向钩子，可能用于：
   - 冻结 embedding 但记录梯度
   - 添加适配层（如 prefix-tuning）
-  - 监控输入分布
+
+
+### `LoraParallelLinearMoE`：适配张量并行线性层
+
+
+**Megatron 的线性层有两种并行模式：**
+
+* **`RowParallelLinear`****：输出维度切分 → LoRA 的 ****A 矩阵行切分****，****B 矩阵完整****；**
+* **`ColumnParallelLinear`****：输入维度切分 → LoRA 的 ****A 矩阵完整****，****B 矩阵列切分****。**
+
+所有非 MoE 的 TP 线性层（如 attention QKV、MLP 中间层等）
+
+### `LoraGroupGemmExperts`：适配 MoE 专家层
+
+
+* **双投影 LoRA****：**
+  * `lora_A / lora_B`：用于 **up projection****（weight1）；**
+  * `lora_A2 / lora_B2`：用于 **down projection****（weight2）；**
+* **分组 GEMM 优化****：**
+  * **使用 **`npu_gmm`（华为 NPU 高效分组矩阵乘）；
+  * **通过 **`group_list` 指定每个专家的 token 数量。
+
+
+
+#### 1. **替换 LoRA 并行层实现**
+
+* **关键！** 将 PEFT 原生的 `LoraParallelLinear` 替换为你自定义的 `LoraParallelLinearMoE`；
+* **确保 LoRA 与 Megatron 的 **`Row/ColumnParallelLinear` 兼容
+
+
+
+* **在模型构建完成后，广播 LoRA 参数到 TP/PP 组****；**
+* **确保所有 rank 的 LoRA 初始权重一致（避免训练发散）。**
+
+
+构建原始 Megatron 模型
+↓
+[ C: 注入 LoRA 配置 + 替换 tp_layer.LoraParallelLinear ]
+↓
+[ C: 调用 get_peft_model(model, lora_config) ]
+↓
+[ B: PEFT 遍历模型 → 对每个 target_module 调用 create_new_module ]
+↓
+[ B: create_new_module 识别层类型（ColumnParallelLinear / GroupGemmExperts）]
+↓
+┌───────────────────────┐
+│ 根据类型选择 LoRA 类型 │
+└───────────────────────┘
+↓
+若是 Row/ColumnParallelLinear → 返回 LoraParallelLinearMoE（A）
+若是 GroupGemmExperts         → 返回 LoraGroupGemmExperts（A）
+↓
+[ B: 调用 replace_module → 将原层替换为 A 中的 LoRA 层 ]
+↓
+[ C: 设置参数属性、注册 hook、扩展 wrapper 白名单 ]
+↓
+[ C: broadcast_params() → 同步 LoRA 初始权重 ]
+↓
+[ 训练开始：forward 调用 A 的 forward 方法 ]
+↓
+[ 保存 checkpoint 时：C 的 unwrap_model_wrapper 穿透 PeftModel 获取 base model ]
 
 ---
 
@@ -279,14 +337,3 @@ lora:
    - MLA + MoE + LoRA 的组合对 kernel 要求高，需确认 NPU 是否支持自定义算子
 
 ---
-
-## 总结
-
-这份配置代表了 **当前最先进的中文大模型架构之一**（DeepSeek-MoE + MLA + YaRN + Full LoRA），适用于：
-
-- **超长上下文理解**（160K tokens）
-- **高吞吐 MoE 推理/训练**
-- **参数高效微调**（覆盖 experts 和 head）
-- **金融、机器人等专业领域 SFT**
-
-如您正在此模型上进行 **金融指令微调或机器人控制策略训练**，该配置已高度适配。若需进一步优化训练稳定性或显存占用，可考虑**缩小 LoRA 范围**或**调整 YaRN 超参**。
