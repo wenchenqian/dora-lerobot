@@ -302,21 +302,6 @@ lora:
 ↓
 [ 保存 checkpoint 时：C 的 unwrap_model_wrapper 穿透 PeftModel 获取 base model ]
 
----
-
-## 七、与前一份配置的对比
-
-
-| 项目             | 本配置                       | 前一份配置        |
-| ---------------- | ---------------------------- | ----------------- |
-| `hidden_size`    | 7168                         | 7680              |
-| `vocab_size`     | 129280                       | 153376            |
-| `attention_type` | MLA                          | MLA（相同）       |
-| `MoE`            | 256E8T                       | 256E8T（相同）    |
-| `LoRA targets`   | **+ experts + output_layer** | 无 experts/output |
-| **训练阶段**     | 可能是**继续预训练 or SFT**  | 明确为 SFT        |
-
-> 本配置的 LoRA 更激进 —— **连 MoE 专家和 lm_head 都微调**，适合需要强任务适配的场景（如金融、机器人指令）。
 
 ---
 
