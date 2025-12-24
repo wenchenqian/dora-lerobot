@@ -431,13 +431,6 @@ class LoraGroupGemmExperts(MegatronModule, LoraLayer):
                 if active_adapter not in self.lora_A.keys():
                     continue
                 self.cur_adapter = active_adapter
-                # lora_A = self.lora_A[active_adapter]
-                # lora_B = self.lora_B[active_adapter]
-                # dropout = self.lora_dropout[active_adapter]
-                # lora_A2 = self.lora_A2[active_adapter]
-                # lora_B2 = self.lora_B2[active_adapter]
-                # dropout2 = self.lora_dropout2[active_adapter]
-                # scaling = self.scaling[active_adapter]
                 hidden_states = hidden_states.to(self.lora_A[active_adapter].weight.dtype)
                 # result += lora_B(lora_A(dropout(permuted_local_hidden_states))) * scaling
 

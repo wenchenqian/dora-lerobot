@@ -115,34 +115,3 @@ def get_model_wrapper(fn):
         return model
 
     return wrapper
-
-# def get_model_wrapper(fn):
-#     @wraps(fn)
-#     def wrapper(*args, **kwargs):
-#         model = fn(*args, **kwargs)
-#         args = get_args()
-
-#         if is_enable_lora():
-#             from peft import LoraConfig, get_peft_model, PeftModel, LoraModel
-#             config = core_transformer_config_from_args(args)
-#             lora_config = LoraConfig(
-#                 r=args.lora_r,
-#                 lora_alpha=args.lora_alpha,
-#                 target_modules=args.lora_target_modules,
-#                 lora_dropout=0.0,
-#                 bias="none",
-#                 megatron_config=config,
-#                 megatron_core="megatron.core",
-#             )
-
-#             for model_item in model:
-#                 model_item = get_peft_model(model_item, lora_config)
-#                 model_item.print_trainable_parameters()
-
-#             import megatron
-#             megatron.training.utils.ALL_MODULE_WRAPPER_CLASSNAMES = tuple(
-#                 list(megatron.training.utils.ALL_MODULE_WRAPPER_CLASSNAMES) + [PeftModel, LoraModel]
-#             )
-
-#         return model
-#     return wrapper
