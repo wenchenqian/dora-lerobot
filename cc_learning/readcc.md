@@ -409,11 +409,20 @@ qwen3-next采用线性attention，和标准attention比例3:1，沿用输出门�
 SwiGLU:门控机制是一个sigmoid函数用来控制信息能够通过多少。门控激活函数Swish / SiLU  SiLU其实就是beta为1时的Swish激活函数
 ![img_9.png](img_9.png)
 ## 强化学习
+policy based:基于polic gradient，不是decent，是incent。最大化reward。最大的问题是high variance，通过引入baseline解决，又提出actor critic，有一个player（policymodel)和coach(valuemodel)
 
+trpo-ppo-grpo  grpo把valuemodel去掉，暴力baseline的产生，计算advantage，产生多个cot，然后求平均
+![img_2.png](img_2.png)
+value based
 
+![img.png](img.png)
 v=奖励+状态转移概率*Q
 Q：选择这个action后一直到最终状态奖励总和的期望   V：在这个状态下一直到最终状态的奖励总和的期望
 state状态：当前上下文。action动作：生成下一个token。奖励：生成一个token后能获得的奖励。奖励延迟：需要生成完整一句话后才能赋予奖励（额外训练一个奖励模型）
+
+
+![img_1.png](img_1.png)
+### grpo
 
 
 ## 遇到的问题
@@ -442,4 +451,10 @@ pp并行：AFAB到1F1B减少激活内存占用，微批次数量等于或小于p
 
 gpu资源足够，小于10B的模型使用DP就好，10B-30B用DP和TP
 
+## 最近看到的
+小米采用混合注意力，具体是 1:5 的全局注意力与滑动窗口注意力混合策略。这里之所以选择混合的 ,是因为小米团队通过实验发现:SWA 简单高效且易于使用,在通用任务、长上下文处理和推理能力上,其整体表现优于线性注意力
 
+采用了一种新的后训练策略:多教师在线策略蒸馏其核心是高效的在线策略学习机制:在通过 SFT/RL 获得领域专家教师模型后,学生模型从自身策略分布中采样(rollout),并利用多个教师提供的密集、逐 token 奖励进行优化。
+
+off-policy训练的缺点在于,学生模型学习的上下文是教师常出现的情境,而不是学生自身经常会遇到的情境。这可能导致累积误差:如果学生在早期犯了个教师从未犯过的错误,它会逐渐偏离 训练中观察到的状态。当我们关注学生在长序列上的表现时,这一问题尤为突出。为了避免这种偏
+离,学生必须学会从自身的错误中恢复。off-policy distillation的另一个问题是,学生可能学会模仿教师的风格和自信,但不一定掌握其事实准确性。
