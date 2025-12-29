@@ -409,11 +409,23 @@ qwen3-next采用线性attention，和标准attention比例3:1，沿用输出门�
 SwiGLU:门控机制是一个sigmoid函数用来控制信息能够通过多少。门控激活函数Swish / SiLU  SiLU其实就是beta为1时的Swish激活函数
 ![img_9.png](img_9.png)
 ## 强化学习
-policy based:基于polic gradient，不是decent，是incent。最大化reward。最大的问题是high variance，通过引入baseline解决，又提出actor critic，有一个player（policymodel)和coach(valuemodel)
+policy based:基于polic gradient，不是decent，是incent。最大化reward。theta+lr*gradient*reward
 
-trpo-ppo-grpo  grpo把valuemodel去掉，暴力baseline的产生，计算advantage，产生多个cot，然后求平均
+更新policymodel的时候最大的问题是high variance，通过引入baseline解决(稳定rewardsignal)，又提出actor critic（policy，value结合），有一个player（policymodel)和coach(valuemodel)，一起学习
+
+advantage(具体action比平均水平有多好，计算由valuemodel完成) actor critic
+
+trpo-ppo-grpo  
+
+trpo：ratio（新旧策略差别有多大）*advantage，
+
+grpo把valuemodel去掉，暴力baseline的产生，计算advantage，产生多个cot，然后求平均
 ![img_2.png](img_2.png)
+
+
 value based
+
+
 
 ![img.png](img.png)
 v=奖励+状态转移概率*Q
