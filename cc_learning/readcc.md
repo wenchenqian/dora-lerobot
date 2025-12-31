@@ -116,7 +116,7 @@ LoRA 路径：x → dropout → lora_A → lora_B → × scaling → 加到 base
 若是 GroupGemmExperts LoraGroupGemmExperts 适配 MoE 专家层。在 MoE 中，每个 token 被路由到少数专家（如 2/8），形成稀疏激活。为高效计算，使用 Grouped GEMM（GMM）： 所有 token 按专家分组 对每组独立做矩阵乘（专家权重 × 该组 token） 最后 unpermute 回原序。如果启用了 专家并行（Expert Parallelism），则 LoRA 参数 不参与全局 AllReduce（因为每个设备的专家是独立的）。
 // 将 所有本地专家 的权重 拼接成一个大矩阵：
 lora_A: 形状 = (num_exp * d_in, r)
-lora_B: 形状 = (num_exp * r, d_out * 2) （*2 因 GLU 激活） 为了高效实现 SwiGLU，大多数 MoE 框架（包括 Megatron）会将 W_up 和 W_gate 的权重拼接在一起，形成一个大的权重矩阵：
+lora_B: 形状 = (num_exp * r, d_out * 2) （*2 因 GLU 激活） 为了高效实现 SwiGLU，大多数 MoE 框架（ Megatron）会将 W_up 和 W_gate 的权重拼接在一起，形成一个大的权重矩阵：
 这样可在 Grouped GEMM 中一次性计算所有专家的 LoRA 分支
 // forward时1、上投影-tokenpermutation-如果有token使用npugemm，reshape矩阵lora_A.weight: (num_exp * d_in, r) → (num_exp, d_in, r)
 lora_B.weight: (num_exp * r, d_out*2) → (num_exp, r, d_out*2)2、下投影-先 apply activation + probs mask
@@ -168,7 +168,22 @@ MOE的辅助loss：1、路由概率熵损失：让router输出更均匀的专家
 global-batch load balancing loss  确保所有专家被均匀激活
 
 MOE的EP切分：EP 和 TP 是 正交的，即 TP 切分是在 每个专家内部 进行的。All-to-All 通信（核心！） 目的：将 tokens 重分布到持有对应 expert 的 GPU 上
-操作： 收集所有 DP+TP 组内的 tokens（实际是 token 表示向量）  根据 expert ID，通过 All-to-All 将 tokens 发送给 EP 组中对应的 GPU!  通信开销分析 [img_8.png](img_8.png)
+操作： 收集所有 DP+TP 组内的 tokens（实际是 token 表示向量）  根据 expert ID，通过 All-to-All 将 tokens 发送给 EP 组中对应的 GPU!
+
+718B模型最优并行策略为TP8/PP16/VPP2/EP32的结论（其中TP只作用于Attention，EP只作用于专家模块）
+
+流水线并行PP：扩大PP可以缓解单卡内存压力，但是其过大易引入空泡，且降低了通信计算掩盖程度；PP减少会导致内存压力增加，被迫大量使用重计算后会导致吞吐下降。因此，在内存使用允许的条件下尽量减少PP，最终确定为PP16。为了优化PP流水时的通信性能，同时考虑内存节省，不同于DualPipe策略，PanguUltraMoE718B使用VPP降低空泡，可以减少
+一半权重内存开销。
+
+张量并行TP：因为专家维度为2048，对专家进行TP切分会导致 矩阵计算效率下降、TP通信需求过高的问题，因此，并行策略中TP只作用于Attention区域，不做MLP部分的切分。考虑到预训练采用昇腾800TA2集群，单机内8卡组成Mesh高速带宽域，
+使用TP8可以最大限度的利用该高带宽进行TP通信，且有效的降低Attn部分的权重和激活值占用。
+
+专家并行EP：EP、TP解耦特性，EP通信域往往同时包 含两级。以EP32为例，其通信域构成为4组8卡机器，其中跨机器通信效率较低。为最大限度
+的利用机内高速带宽域，提高EP通信效率，考虑了优化的分级通信算法带来的影响。当EP为32时，同一EP域内的32卡间A2A机间通信量相比于原本的32卡间下降一半，可以显著提 升EP通信效率。若EP升高到64，则分级通信的效率将下降一半；若EP降至16，则单卡内专
+家数增加，内存压力上升，同时EP小会让整个EP域内供分配的Token数量降低，影响负载均
+衡。在反向梯度累加计算中，EP减少将导致单卡专家数增多，则add算子的计算量上升，
+导致整体计算效率下降。因此，在昇腾集群特性和分级通信算法的影响下，综合通信与计算两
+方面效率的整体考量，EP为32时模型训练可达到最优性能。
 
 MTP预测：训练看的远，加入MTP损失，推理的话就是投机算法
 
@@ -474,7 +489,48 @@ state状态：当前上下文。action动作：生成下一个token。奖励：�
 
 ## 遇到的问题
 
+### 盘古718b训练
+拉起4K卡任务，在多数节点上都发现了第一个step时报出同步失败。
 
+排查思路：
+1、查看plog是否有明确报错
+2、查看turbo使用带宽是否异常
+3、尝试减少卡数看能否复现
+ 
+1、查看plog是否有明确报错：
+plog中发现是broadcast超时。结合堆栈是在TP0往TP1~7发送数据接收方超时，即TP0没有发送数据，怀疑是turbo读取瓶颈。
+2、查看turbo使用带宽是否异常
+turbo出现打满情况。
+3、尝试减少卡数看能否复现
+减少到128/256P后，能成功拉起实验。
+
+以上三条现象，判断是数据读取出现了瓶颈。查看data config发现存在大量未被DP公约数整除的tar包子数据集。按DP=512，读取的range至少要是32的倍数。
+另外，把watchdog关掉，可以强制突破torch通信的半小时限制，避免torch超时退出，export HCCL_ASYNC_ERROR_HANDLING=0。如果某个通信操作（如 broadcast, all_reduce）超过预设时间（默认 30 分钟），会 主动抛出异常并终止训练。
+这是为了防止“死锁”长期占用资源。
+
+理想情况：总数据分片数（如 tar 包数量）能被 DP 整除，例如 1024 个 tar 包 + DP=512 → 每个 rank 读 2 个。
+问题情况：存在大量 不能被 DP 整除的分片数量，例如 1000 个 tar 包 + DP=512。rank（尤其是 DP=0，即 TP0 所在的 DP rank）需要跨多个tar包读取极少量数据。
+为了读取几个样本，必须 打开并解压多个 tar 文件，造成 I/O 放大（I/O amplification）。
+在高 DP（如 512）下，这种不均衡被放大，部分 rank（特别是 rank 0）I/O 负载远高于其他 rank。在 DP=512 场景下，要求每个 rank 的读取范围 ≥32 且对齐，可确保：
+每个rank读取连续、完整的tar包或大块数据
+
+### 预训练 loss 异常bug数据生成存在随机性，导致存在问题
+多进程 tokenization 在不同节点上引入了非确定性
+
+训练启动流程可能是这样的：
+每个训练节点独立执行 tokenization（即“每个节点都各自进行 tokenization”）。
+每个节点内部使用多进程来加速 .json → .bin/.idx 的转换。
+原始数据为多个 .json 文件。
+tokenization 后生成 train.bin（token ID 序列）和 train.idx（样本偏移索引
+
+Python multiprocessing或类似并行框架在处理多个 .json 文件时，子进程完成顺序是不确定的。最终拼接的 token 序列顺序可能不同。
+在分布式训练中（尤其是 ZeRO-DP），所有节点必须在每一步看到完全相同的样本序列。如果节点 A 的 train.bin 是 [doc1, doc2, doc3, ...]，而节点 B 是 [doc2, doc1, doc3, ...]，那么：
+Step 0：A 看 doc1，B 看 doc2 → 梯度不同 → 通信后模型参数被“污染”。
+梯度不一致 会被 AllReduce 平均，但语义完全错位
+
+解决方案：设置 WORKS=1 禁用多进程。
+2、预先完成 tokenization，生成确定性的 train.bin + train.idx。
+所有训练节点直接加载这些预生成文件，跳过运行时 tokenization。预处理脚本必须显式排序输入文件：files = sorted(glob.glob("*.json"))禁用任何随机操作
 
 ## 数据packing
 
