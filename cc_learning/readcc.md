@@ -484,7 +484,7 @@ SwiGLU:门控机制是一个sigmoid函数用来控制信息能够通过多少。
 
 ## 强化学习
 
-policy based:基于polic gradient，不是decent，是incent。最大化reward。theta+lr*gradient*reward
+policy based:基于polic gradient，不是decent，是incent。最大化reward。theta+lr*gradient*reward  策略梯度直接优化策略函数π，最大化预期 的回报（累计奖励）R(τ)
 
 更新policymodel的时候最大的问题是high variance，通过引入baseline解决(稳定rewardsignal)，又提出actor critic（policy，value结合），有一个player（policymodel)和coach(valuemodel)，一起学习
 
@@ -494,17 +494,20 @@ trpo-ppo-grpo
 
 trpo：ratio（新旧策略差别有多大）*advantage， 用KL散度进行计算（相当于加入一个限速器，限制ration）
 
-ppo：ppo是trpo的简化版本，用的是clipping的方法，policymodel和valuemodel一起训
+ppo：ppo是trpo的简化版本，重要性采样需要保证两个策略分布相似，否则高方差会导致优化不稳定，用的是clipping的方法，policymodel和valuemodel一起训
 
 ppo代表onpolicy，DPO（降低不好回答被采样的概率，提升好回答的概率）代表offpolicy
 
 ### grpo
 
-grpo把valuemodel去掉，暴力baseline的产生，计算advantage，产生多个cot，然后求平均
+解决传统PPO在计算资源和训练稳定性方面的问题，grpo把valuemodel去掉，暴力baseline的产生，计算advantage，产生多个cot，然后求平均
 ![img_2.png](img_2.png)
-policymodel生成很多答案，用rewardmodel生成答案，然后用标准化的方法减mean除以sd，算出每个答案对应的advantage，然后更新policymodel。referencemodel计算KL散度，希望policymodel和最开始的初始model差别不要太大。
+流程：policymodel生成很多答案，用rewardmodel生成答案，然后用标准化的方法减mean除以sd，算出每个答案对应的advantage，然后更新policymodel。referencemodel计算KL散度，希望policymodel和最开始的初始model差别不要太大。1、初始化策略函数 2、抽取组样本：从分布P(Q)中采样问题q，然后根据旧策略πθ为每个问题q抽取G 个输出 3、计算advantage和目标函数：对于每个输出oi的每个时间步t，计算advantage，在计算过程中，会用到当前策略πθ和旧策略πθold对动作的概率估计。4、更新策略参数：通过优化目标函数JGRPO(θ)，计算梯度并更新当前策略模型5、更新旧策略
 
 grpo使用的是PPO里面的object function，额外加了KL，clip（让ratio在1附近）做的事就是ratio乘以advantage，lowerbound让训练更保守
+
+PPO 算法通过价值函数来估计奖励，并使用优势函数减少方差，GRPO不同： (1) PPO需要单独训练valuemodel（critic），增加了资源消耗。 GRPO则避免了这一过程，通过组内奖励估计直接计算优势值，减少了计算开销 (2) 基线估计效率：PPO对每个样本独立计算baseline，在样本数量较大时效率较低。GRPO通过分组计算奖励，提高了基线估计的效率。 (3) PPO的优化依赖单个样本的奖励和基线计算，容易受到单一奖励样本的影响，导致方差较高。GRPO通过优化组内奖励，减少了这种高方差的影响，使得训练更加稳定。
+
 
 金融奖励模型，选择题verifier，针对（finqa，financeIQ，CFLUE，openfindata）数据集根据基模型pass@1的结果进行筛选，搜集起来的数量约1k起的数据集。128卡
 
