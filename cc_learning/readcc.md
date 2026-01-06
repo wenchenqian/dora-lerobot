@@ -504,14 +504,17 @@ ppo代表onpolicy，DPO（降低不好回答被采样的概率，提升好回答
 ![img_2.png](img_2.png)
 流程：policymodel生成很多答案，用rewardmodel生成答案，然后用标准化的方法减mean除以sd，算出每个答案对应的advantage，然后更新policymodel。referencemodel计算KL散度，希望policymodel和最开始的初始model差别不要太大。1、初始化策略函数 2、抽取组样本：从分布P(Q)中采样问题q，然后根据旧策略πθ为每个问题q抽取G 个输出 3、计算advantage和目标函数：对于每个输出oi的每个时间步t，计算advantage，在计算过程中，会用到当前策略πθ和旧策略πθold对动作的概率估计。4、更新策略参数：通过优化目标函数JGRPO(θ)，计算梯度并更新当前策略模型5、更新旧策略
 
+Rollout阶段，Actor逐token生成，每一步从概率分布中采样（temperature/top\_p 控制）。train：将prompt + response拼接，输入当前 Actor 模型；模型输出 logits，计算每个response token 的log prob：
+
+
 grpo使用的是PPO里面的object function，额外加了KL，clip（让ratio在1附近）做的事就是ratio乘以advantage，lowerbound让训练更保守
 
 PPO 算法通过价值函数来估计奖励，并使用优势函数减少方差，GRPO不同： (1) PPO需要单独训练valuemodel（critic），增加了资源消耗。 GRPO则避免了这一过程，通过组内奖励估计直接计算优势值，减少了计算开销 (2) 基线估计效率：PPO对每个样本独立计算baseline，在样本数量较大时效率较低。GRPO通过分组计算奖励，提高了基线估计的效率。 (3) PPO的优化依赖单个样本的奖励和基线计算，容易受到单一奖励样本的影响，导致方差较高。GRPO通过优化组内奖励，减少了这种高方差的影响，使得训练更加稳定。
 
 
-金融奖励模型，选择题verifier，针对（finqa，financeIQ，CFLUE，openfindata）数据集根据基模型pass@1的结果进行筛选，搜集起来的数量约1k起的数据集。128卡
+金融从业考试打榜，提升分数。主要实现金融奖励模型，选择题verifier，针对（finqa，financeIQ，CFLUE，openfindata）数据集根据基模型pass@1的结果进行筛选，搜集起来的数量约1k起的数据集。128卡
 
-**Reward hacking** 指策略模型学会“钻 RM 的空子”，生成高 reward 但实际质量差的输出（例如：堆砌关键词
+**Reward hacking** 指策略模型学会“钻 RM 的空子”，生成高 reward 但实际质量差的输出例如：堆砌关键词
 
 通常hack不常见，主要是“漏算”是指：奖励函数（设计的 reward function）未能对策略模型（policy）生成的输出——该惩罚的没惩罚，该奖励的没奖励。（**reward 本身能力不足**）
 
@@ -536,6 +539,18 @@ PPO 算法通过价值函数来估计奖励，并使用优势函数减少方差�
   2. **正则单字母匹配**：用 `(?<![A-Za-z])([A-Za-z])(?=$|(?=[^A-Za-z]))` 提取**独立出现的字母**（避免从单词中误提）；
   3. **分段 token 分析**：按逗号分段；每段按空格切 token；非常鲁棒，能处理中英文混排、描述性文本、格式混乱等情况。
 
+训练配置，KL 惩罚类型（低方差 KL），KL 系数0.001，n_samples_per_prompt: 8，adv_estimator: group_norm组内归一化
+
+
+#### mindspeedrl
+
+* `micro_batch_size`：模型训练时前反向(Prompt, Response)的数量，默认为1，在不oom的情况下越大越好；
+* `actor_forward_micro_batch_size`：actor重新计算vllm推理的(Prompt, Response)的logp的数量，默认与micro\_batch\_size一致;
+* `ref_forward_micro_batch_size`：ref计算vllm推理的(Prompt, Response)的logp的数量，默认与micro\_batch\_size一致;
+* `global_batch_size`：为单次rollout总prompt数量（总样本数为global\_batch\_size\*n\_samples\_per\_prompt）。可适当设置的大一点；
+* `mini_batch_size`：模型训练的global\_batch\_size，为prompt数量，自动与n\_samples\_per\_prompt相乘。该值需小于等于global\_batch\_size，等于时即为on-policy算法，小于时为off-policy算法；
+
+如何提高训练吞吐？可以开启remove padding与dynamic batch size
 
 
 value based
