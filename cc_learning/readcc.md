@@ -54,9 +54,7 @@ loss scale 行业大模型增量预训练通常伴随着大量数据以及较长
 参考Dynamic Loss-Based Sample Reweighting for Improved Large Language Model Pretraining 调整不同领域的训练数据配比
 动机：为什么要在训练过程中动态的reweight？
 有些样本训练初期很难学，赋予大权重，随着训练进度学到了，权重可以降低。
-样本量很多，无法记录每个样本的损失
-将sample-level改成domain-level
-将channel loss 线性归一化 + 平移变换 缩放到 【-1， 1】,得到 h_i  直接使用原始 loss 会导致： 大 loss 的 channel 主导梯度更新，小 loss 的 channel 被忽略
+将channel loss 线性归一化 + 平移变换 缩放到【-1，1】,得到 h_i 直接使用原始loss会导致：大loss的channel主导梯度更新，小loss的channel被忽略
 通过一个线性上界策略得到si，然后softmax 得到每个领域的权重,根据权重对 channel loss 进行加权，对加权的loss反向    batchsize过小，一个batch可能没法采样到所有的领域
 global batchsize越大，每个领域包含的样本越多，得到的loss权重越准确，如果 global batchsize很小，loss权重可能会被一些难样本带偏
 模型会自动聚焦于当前更“困难”或更“重要”的领域，实现动态平衡训练
@@ -80,9 +78,7 @@ a) 对每个领域，计算滑动平均 loss，取最近 10 个 iter 的 loss �
 b) 应用 LinUpper 策略计算权重：线性归一化 + 上界裁剪 c) 用权重计算当前 micro-batch 的 loss
 
 一、什么是“对 global batch 计算权重”？
-这种理想化方案通常指：
-
-当前 global batch 包含：
+这种理想化方案通常指：当前 global batch 包含：
 30 条金融样本 → loss_finance = 1.2
 50 条数学样本 → loss_math = 0.8
 20 条通用样本 → loss_general = 0.5
@@ -673,6 +669,8 @@ DeepSeek蒸馏，通过蒸馏技术，快速使得快思考模型具有慢思考
 * **数据清洗：**通过Deepseek-V3大模型，结合人工对R1的结果进行verify，保留高质量回复。
 
 基于Chat模型的两阶段蒸馏慢思考能力的训练方式：第一阶段通用Reasoner训练：通过大量通用数据训练模型，使其在广泛的任务上具备基础能力，同时纠正模型的初始回答风格，确保其输出质量。第二阶段行业Reasoner训练：增强模型在特定行业或应用场景中的表现，使其具备更专业的知识和技能。尽管蒸馏后的模型能够实现快慢思考的切换，但在快思考人设下的回复仍然偏长。这主要是因为模型在训练过程中过度学习了慢思考数据的长回复特征。后续将进行快思考数据和慢思考数据的混合训练，以确保在快思考人设下，模型的回复能够更加简洁高效。
+
+解决快思考回复过长：
 
 1. 先用蒸馏快速获得基础慢思考能力（80万 CoT SFT）；
 2. 构造混合数据集：
