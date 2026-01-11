@@ -450,8 +450,12 @@ advantage(具体action比平均水平有多好，计算由valuemodel完成) acto
 trpo-ppo-grpo
 
 trpo：ratio（新旧策略差别有多大）*advantage， 用KL散度进行计算（相当于加入一个限速器，限制ration）
+重要性采样：只能更新一次policy，因为state和action是当前策略生成的
+
 
 ppo：ppo是trpo的简化版本，重要性采样需要保证两个策略分布相似，否则高方差会导致优化不稳定，用的是clipping的方法，policymodel和valuemodel一起训
+
+GAE计算每个时间步的优势，输入reward和value
 
 ppo代表onpolicy，DPO（降低不好回答被采样的概率，提升好回答的概率）代表offpolicy，DPO将RL问题转化为一个基于偏好数据的分类问题，绕过了奖励建模和Critic。
 
@@ -463,7 +467,9 @@ ppo代表onpolicy，DPO（降低不好回答被采样的概率，提升好回答
 
 Rollout阶段，Actor逐token生成，每一步从概率分布中采样（temperature/top\_p 控制）。train：将prompt + response拼接，输入当前 Actor 模型；模型输出 logits，计算每个response token 的log prob：
 
-grpo使用的是PPO里面的object function，额外加了KL，clip（让ratio在1附近）做的事就是ratio乘以advantage，lowerbound让训练更保守
+grpo使用的是PPO里面的object function，额外加了KL（防止policy和ref偏差过大，用低偏差估计近似计算），clip（让ratio在1附近）做的事就是ratio乘以advantage，lowerbound让训练更保守
+
+存在lengthbias问题，鼓励在答案错误时倾向给更长答案。difficultbias，简单问题adv很大。所以用drgrpo解决，取消了按长度归一化，以及取消除以标准差
 
 **PPO 算法通过价值函数来估计奖励**，并使用优势函数减少方差，GRPO不同： (1) PPO需要单独训练valuemodel（critic），增加了资源消耗。 GRPO则避免了这一过程，通过组内奖励估计直接计算优势值，减少了计算开销 (2) 基线估计效率：PPO对每个样本独立计算baseline，在样本数量较大时效率较低。GRPO通过分组计算奖励，提高了基线估计的效率。 (3) PPO的优化依赖单个样本的奖励和基线计算，容易受到单一奖励样本的影响，导致方差较高。GRPO通过优化组内奖励，减少了这种高方差的影响，使得训练更加稳定。
 
@@ -657,3 +663,11 @@ DeepSeek-R1-Distill-Qwen-32B 通过80万条蒸馏数据，经过SFT微调得到�
 * 40步之后：在测试集上的表现并没有继续得到提升，后续的训练对于各项指标的改善作用不大。
 
 原因推测：过拟合/过早收敛：由于快思考模型已经在大规模的指令数据上进行了训练，行为特征较为强烈，对既定指令以及短链 CoT进行了深入的拟合。当执行 RL 训练时，如果奖励信号与其固有的指令分布或者短链思维方式存在较大差异，模型可能更容易走向过拟合；推理长度与 RL 目标的强耦合：在实际观测过程中发现，快思考模型的输出长度往往会随着训练步数的增加而持续下降。这表明在某些奖励信号的导向下，模型迅速收缩了输出空间。这有可能是模型内化了 “回答简短即得高分” 的观念，也可能是针对当前训练数据以及回报机制找到了一种 “偷懒策略”。这种与奖励信号强耦合的行为，往往会牺牲模型原本更泛化的长链推理能力。而且结合评测结果来看，回复长度和评测效果的峰值均出现在 40 步之内，这表明回复长度和评测效果之间存在着一定程度的耦合关系，长CoT回复风格对模型推理能力具有明显的增益效果。
+
+### agent
+agentskill按需加载
+
+react运行模型，提交任务，思考，是否调用工具（action，observe循环）
+
+上下文工程：1、指导性，sysprompt，fewshot2、信息型的，rag，memory3、行动上下文，工具定义调用
+为了缓解一次性输入所有上下文，1.写入，会话内（写入草稿纸）和持久化（写入知识图谱）2、选取，确定性，模型驱动选取，检索式选取通过相似度检索3、压缩，作用单一信息流4、隔离，多个信息流设置边界
